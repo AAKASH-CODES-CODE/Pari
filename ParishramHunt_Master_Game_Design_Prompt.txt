@@ -1,0 +1,248 @@
+================================================================================
+PARISHRAM HUNT: COACHING CAMPUS 3D PROP HUNT - MASTER IMPLEMENTATION PROMPT
+================================================================================
+Target Platform : Android Studio (Kotlin / Java / NDK / Sceneview / Filament / LibGDX)
+Genre           : 3D First/Third-Person Multiplayer-Ready Prop Hunt & Action Game
+Theme           : Realistic Indian Coaching Institute Campus (Patna / Kota Style)
+Target Hardware : Android Mobile & Tablet (Vulkan / OpenGL ES 3.0, 60 FPS Target)
+================================================================================
+
+PROMPT INSTRUCTION FOR AI / DEVELOPER IN ANDROID STUDIO:
+--------------------------------------------------------------------------------
+You are an expert 3D Game Engine Developer and Android Game Engineer. Your task is to
+build "Parishram Hunt", a complete, realistic 3D Prop Hunt game in Android Studio.
+All 3D models (glTF .glb), PBR textures (.png), icon assets, and prop layout coordinate
+JSON files are provided in the companion "ParishramHunt_3D_Assets.zip" package.
+
+Follow the complete architecture, game loop, math formulas, mobile touch controls,
+AI bot logic, and rendering pipelines detailed below to implement the game.
+
+--------------------------------------------------------------------------------
+1. GAME CONCEPT & ENVIRONMENT
+--------------------------------------------------------------------------------
+- Story & Premise: In "Parishram Coaching Institute" (a bustling multi-floor IIT-JEE/NEET
+  coaching campus), students take on the role of Props to hide from the faculty/invigilators
+  (Hunters).
+- Campus Architecture:
+  * Ground Floor (GF): Main Campus Gate, Reception / Admission Desk, Cycle Parking Stand,
+    Cafeteria / Chai Tapri, Student Restrooms, Doubt Counter, Central Hallway.
+  * 1st Floor (1F): Physics Lecture Hall (Patna Benches & Whiteboard), Chemistry Lab,
+    Mathematics Classroom, Faculty Rest Area, Library & Doubt Rooms, Staircases.
+- Provided 3D Assets:
+  * Map Building: "CoachingCenter_Shell.glb" (Full 2-floor textured architecture).
+  * Characters: "Hunter_Character.glb", "Prop_Student_Character.glb", "Hunter_Blaster.glb".
+  * Props (30 .glb files): Patna Benches, Doubt Desks, Water Bottles, Cardboard Boxes,
+    Chairs (Blue/Red), Cycles, Dustbins, Fire Extinguishers, Gas Cylinders, Helmets,
+    Lunch Boxes, Office Chairs, Plastic Stools, Potted Plants, Printers, Shoe Racks,
+    Tea Kettles, Water Coolers, Wooden Crates, Book Stacks, Buckets, Desk Lamps.
+  * Placement: "map_props_layout.json" containing exact X, Y, Z coordinates, rotation
+    euler angles, and scale vectors for all world objects and room tags.
+
+--------------------------------------------------------------------------------
+2. CORE GAMEPLAY LOOP & MATCH PHASES
+--------------------------------------------------------------------------------
+A match consists of 3 distinct, synchronized phases:
+
+A. HIDE PHASE (Duration: 60 Seconds)
+   - Hunters are spawned at the Main Campus Gate on the Ground Floor and BLINDED / FROZEN.
+     A dark frosted overlay ("HUNTERS BLINDED: HIDE PHASE IN PROGRESS") prevents viewing.
+   - Props spawn inside the campus corridors and have 60 seconds to:
+     * Explore classrooms and corridors.
+     * Aim their crosshair at any object and tap "MORPH" to instantly disguise as that prop.
+     * Find a stealthy spot (e.g., blend in as a chair beside other chairs, or a bottle on a desk).
+     * Tap "LOCK" to freeze prop orientation and freely look around 360 degrees.
+
+B. HUNT PHASE (Duration: 300 Seconds / 5 Minutes)
+   - Hunters are released with full speed and armed with the "Chalk Blaster".
+   - Hunters search rooms, checking suspicious objects.
+   - Shooting a STATIC environment prop (false alarm) triggers a "WRONG HIT PENALTY":
+     * Hunter takes -5 HP damage ("Recoil / Chalk Burn").
+     * Audio buzz plays, screen flashes orange, crosshair shakes.
+     * Prevents hunters from blindly spraying every classroom item.
+   - Shooting a REAL disguise Prop deals blaster damage and triggers a hit-marker chime:
+     * Prop flashes white/red.
+     * Prop loses HP (scaling by size: Bottle = 25 HP, Chair = 60 HP, Bench/Desk = 120 HP).
+   - If a Prop's HP reaches 0:
+     * Fatal Shot Kill-Cam: Slow-motion camera tracks the chalk bullet to the prop,
+       bursting it into chalk particles and revealing the defeated student.
+     * The prop player enters Spectator Mode to watch remaining teammates.
+
+C. ROUND OVER & WIN CONDITIONS
+   - PROPS WIN IF: At least one Prop survives when the 300s timer expires.
+   - HUNTERS WIN IF: All hidden Props are tagged/eliminated before time runs out.
+   - Results Screen: Displays Winner Banner ("PROPS WIN!" / "HUNTERS WIN!"), MVP tags,
+     survival score, and buttons for "PLAY NEXT ROUND" or "MAIN MENU".
+
+--------------------------------------------------------------------------------
+3. PROP & HUNTER SPECIAL ABILITIES
+--------------------------------------------------------------------------------
+A. PROP TEAM ABILITIES:
+   1. Morph Disguise:
+      - Center screen raycast (max 4.5m distance).
+      - If ray hits any valid prop, HUD shows "[TAP MORPH] -> Transform into Plastic Stool".
+      - Swaps player mesh and bounding collision cylinder to match target prop.
+   2. Rotation Lock (Free-Look Mode):
+      - Locks the 3D prop geometry in place on the floor.
+      - Disconnects camera rotation so the player can look all around without wobbling the prop.
+   3. Whistle / Taunt (Cooldown: 20 Seconds):
+      - Emits a loud audio whistle chirp from the prop's world position.
+      - Awards +50 Survival Points.
+      - Creates a subtle sound ripple, giving Hunters a direction clue.
+   4. Decoy Clone (Cooldown: 30 Seconds):
+      - Spawns an identical stationary clone prop at player's location.
+      - Allows the real player to sneak away while Hunter inspects the decoy.
+   5. Stun Flash Wave (Cooldown: 40 Seconds):
+      - Emits an expanding chalk wave (radius 4.0m).
+      - Any Hunter caught inside is stunned (blinded white screen and slowed to 25% speed for 3s).
+
+B. HUNTER TEAM ABILITIES:
+   1. Chalk Blaster:
+      - 30-round magazine, semi-auto or 3-round burst.
+      - Raycast trajectory with glowing white chalk particle trail.
+   2. Radar Scanner (Cooldown: 35 Seconds):
+      - Scans a 12m sphere and beeps with increasing frequency based on proximity to nearest prop.
+   3. Sprint Boost:
+      - Increases movement speed by 40% for 4 seconds (stamina bar based).
+
+--------------------------------------------------------------------------------
+4. MOBILE TOUCH CONTROLS ARCHITECTURE (DUAL-ZONE INPUT)
+--------------------------------------------------------------------------------
+On touchscreens, touch conflicts between looking and moving cause major frustration.
+Implement strict dual-zone partition:
+
+A. LEFT ZONE (Screen X: 0.0 to 0.42):
+   - Virtual Thumbstick (Dynamic / Floating or Fixed).
+   - OnPointerDown inside left zone anchors the thumbstick base.
+   - OnDrag calculates normalized vector (dir = delta / radius, clamped to 1.0).
+   - Deadzone: 0.12f. Outer edge: 0.85f triggers Sprint.
+   - Drives character translation in local camera forward/right directions.
+
+B. RIGHT ZONE (Screen X: 0.42 to 1.0):
+   - Touch Look Pad (Full right screen).
+   - Captures drag deltas (deltaX, deltaY) per pointer ID.
+   - Rotation:
+     * Yaw (Horizontal): Rotates character or camera rig around global Y-axis.
+     * Pitch (Vertical): Clamps camera elevation between -65° (looking down) and +75° (looking up).
+   - Sensitivity: User-adjustable multiplier (default 1.0x).
+   - Important: Action buttons (Fire, Jump, Morph, Whistle) sitting on the right MUST consume
+     their individual taps without cancelling active camera drags from other fingers.
+
+--------------------------------------------------------------------------------
+5. OFFLINE AI BOTS SYSTEM (ZERO INTERNET REQUIRED)
+--------------------------------------------------------------------------------
+For single-player mode, backfill matches with intelligent AI Bots (4 to 16 players total):
+
+A. BOT HUNTERS:
+   - State Machine: PATROL -> INVESTIGATE_WHISTLE -> SUSPECT_PROP -> SHOOT -> PURSUE.
+   - Use NavMesh or Waypoint graph across Ground and 1st Floor.
+   - When a Prop whistles within 20m, Bot sets destination to audio origin.
+   - Suspicion Logic: Bot stops in a room, visually evaluates nearby props:
+     * If prop is in an unnatural spot (e.g. stool in middle of doorway), suspicion rises.
+     * After 1.5s delay, Bot fires 1 test shot.
+     * If hit confirm, Bot continues firing until prop is eliminated.
+     * If wrong hit (-5 HP), Bot learns it's static and resumes patrol.
+
+B. BOT PROPS:
+   - State Machine: SEEK_HIDING_SPOT -> MORPH -> SETTLE_AND_LOCK -> OCCASIONAL_WHISTLE.
+   - Parses "map_props_layout.json" to identify plausible cluster zones:
+     * Chairs near study desks, bottles on cafeteria tables, cycles in parking.
+   - Every 30-45 seconds, rolls random chance to Whistle for bonus points.
+   - If shot but alive, unlocks and sprints to another room to morph again!
+
+--------------------------------------------------------------------------------
+6. ANDROID STUDIO IMPLEMENTATION OPTIONS & TECH STACK
+--------------------------------------------------------------------------------
+Choose one of the following recommended architectures in Android Studio:
+
+OPTION A (Recommended for Quick High-Fidelity 3D): Sceneview / Google Filament
+- Dependencies (in build.gradle.kts):
+  * implementation("io.github.sceneview:sceneview:2.2.1")
+  * implementation("com.google.android.filament:filament-android:1.43.0")
+  * implementation("com.google.android.filament:gltfio-android:1.43.0")
+- Benefits: Native Kotlin, photorealistic PBR rendering, built-in glTF .glb loader,
+  dynamic shadows, bloom, tone mapping, low memory footprint.
+
+OPTION B: LibGDX with gdx-gltf
+- Dependencies:
+  * implementation("com.badlogicgames.gdx:gdx-backend-android:1.12.1")
+  * implementation("com.badlogicgames.gdx:gdx-box2d:1.12.1")
+  * implementation("com.github.mgsx-dev.gdx-gltf:gltf:2.1.0")
+- Benefits: Cross-platform Java/Kotlin, custom shader control, Bullet 3D physics.
+
+OPTION C: Native Android C++ / NDK with OpenGL ES 3.0 / Vulkan
+- Libraries: tinygltf or assimp for .glb loading, glm for math.
+- Benefits: Maximum performance, zero runtime overhead.
+
+OPTION D: Android WebView + Three.js (Zero 3D Engine Setup)
+- Embed "preview/index.html" inside a full-screen hardware-accelerated Android WebView.
+- JavaScript <-> Android interface via @JavascriptInterface for native haptics,
+  sound, and local score persistence.
+
+--------------------------------------------------------------------------------
+7. PROCEDURAL AUDIO SYNTHESIS (ZERO EXTERNAL SOUND ASSETS NEEDED)
+--------------------------------------------------------------------------------
+Audio is generated programmatically using Android `AudioTrack` PCM streaming (16-bit 44.1kHz):
+
+- Chalk Blaster Shot:
+  * High-frequency pulse (980 Hz) decaying rapidly over 0.08s with white noise burst.
+- Hit Marker Chime:
+  * Pure sine wave double chime: 1320 Hz for 0.05s followed by 1760 Hz for 0.08s.
+- Wrong Hit Penalty Buzz:
+  * Square wave buzz at 110 Hz with low-pass filter over 0.22s.
+- Prop Whistle Chirp:
+  * Ascending sine glide from 1200 Hz to 2400 Hz over 0.35s with gentle vibrato.
+- Countdown Tick:
+  * Click impulse (2200 Hz, 0.015s) with stereo pan.
+
+--------------------------------------------------------------------------------
+8. DATA MODELS & COORDINATE PARSER (KOTLIN SPECIFICATION)
+--------------------------------------------------------------------------------
+Parse "map_props_layout.json" into clean data classes:
+
+```kotlin
+data class PropLayoutFile(
+    val map_name: String,
+    val units: String,
+    val total_props: Int,
+    val props: List<PropSpawnEntry>
+)
+
+data class PropSpawnEntry(
+    val id: String,
+    val name: String,
+    val glb_file: String,
+    val room: String,
+    val floor: Int,
+    val position: Vector3D,
+    val rotation_euler: Vector3D,
+    val scale: Vector3D,
+    val default_hp: Int
+)
+
+data class Vector3D(val x: Float, val y: Float, val z: Float)
+
+enum class TeamRole { PROP, HUNTER }
+enum class MatchPhase { HIDE_PHASE, HUNT_PHASE, ROUND_OVER }
+```
+
+--------------------------------------------------------------------------------
+9. STEP-BY-STEP BUILD CHECKLIST FOR ANDROID STUDIO
+--------------------------------------------------------------------------------
+Step 1: Create a new Android Studio project (Language: Kotlin, Min SDK: 26, Target SDK: 35).
+Step 2: Unzip "ParishramHunt_3D_Assets.zip" and place the folders into `app/src/main/assets/`.
+Step 3: Add Sceneview / Filament or LibGDX dependency to `app/build.gradle.kts`.
+Step 4: Load "Map/CoachingCenter_Shell.glb" and attach static environment collision mesh.
+Step 5: Load "Map/map_props_layout.json", iterate through entries, and instance each prop
+        from `Props/<glb_file>` at the specified position, rotation, and scale.
+Step 6: Implement `VirtualThumbstickView` (left zone) and `TouchLookHandler` (right zone).
+Step 7: Create `PlayerController`:
+        - Hunter: Humanoid model, blaster in hand, camera in first-person or third-person over-shoulder.
+        - Prop: Humanoid model initially; morphing swaps active render model to selected prop .glb.
+Step 8: Implement `GameStateManager`: 60s Hide Phase -> 300s Hunt Phase -> End Match.
+Step 9: Add `BotManager` with 6-12 AI bots patrolling rooms and whistling.
+Step 10: Wire procedural audio synthesis and HUD overlay (HP bar, timer, role badge, action buttons).
+Step 11: Build and Run on physical device!
+
+================================================================================
+END OF MASTER IMPLEMENTATION PROMPT
+================================================================================

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coaching Center (Ground + 1st Floor) — Realistic 3D Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: rgba(15, 23, 42, 0.86);
+      --border: rgba(148, 163, 184, 0.25);
+      --accent: #38bdf8;
+      --accent-strong: #0284c7;
+      --warm: #f59e0b;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      inline-size: 100%;
+      block-size: 100dvh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: clip;
+    }
+
+    .viewer-shell {
+      position: relative;
+      display: grid;
+      grid-template-rows: 1fr;
+      inline-size: 100%;
+      block-size: 100dvh;
+    }
+
+    #viewport-canvas {
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      outline: none;
+      touch-action: none;
+    }
+
+    .hud-top {
+      position: absolute;
+      inset-block-start: 12px;
+      inset-inline: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: safe center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .card {
+      pointer-events: auto;
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 9px 13px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: clamp(0.92rem, 0.84rem + 0.55vw, 1.2rem);
+      font-weight: 700;
+    }
+
+    .title-block p {
+      margin: 2px 0 0;
+      font-size: clamp(0.72rem, 0.68rem + 0.2vw, 0.84rem);
+      color: var(--muted);
+    }
+
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: safe center;
+      gap: 6px;
+      max-inline-size: 100%;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(30, 41, 59, 0.92);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 0.79rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease, transform 100ms ease;
+    }
+
+    button:hover {
+      background: rgba(51, 65, 85, 0.96);
+      border-color: var(--accent);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button.active {
+      background: var(--accent-strong);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    button.floor-btn.active {
+      background: #b45309;
+      border-color: var(--warm);
+    }
+
+    .hud-bottom {
+      position: absolute;
+      inset-block-end: 12px;
+      inset-inline-start: 12px;
+      max-inline-size: calc(100% - 24px);
+      pointer-events: none;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .legend strong {
+      color: var(--text);
+    }
+
+    .status-pill {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-start: 50%;
+      transform: translate(-50%, -50%);
+      padding: 14px 20px;
+      border-radius: 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .status-pill.hidden {
+      display: none;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="viewer-shell">
+    <canvas id="viewport-canvas" aria-label="Coaching Center 2-Floor 3D Preview"></canvas>
+
+    <div class="hud-top">
+      <div class="hud-row">
+        <section class="card title-block">
+          <h1>Coaching Center (Ground + 1st Floor) — 3D PBR Preview</h1>
+          <p id="mode-hint">Orbit Mode: Left-drag rotate · Right-drag pan · Scroll zoom</p>
+        </section>
+
+        <div class="card controls-bar" aria-label="Floor Layers and Walk Mode">
+          <button type="button" data-layer="1f-cutaway" class="floor-btn active">1st Floor (Cutaway)</button>
+          <button type="button" data-layer="gf-cutaway" class="floor-btn">Ground Floor Only</button>
+          <button type="button" data-layer="full" class="floor-btn">Full 2-Floor Building</button>
+          <button type="button" id="toggle-walk">Walk Mode (WASD)</button>
+          <button type="button" id="walk-floor-btn" style="display:none;">Go To 1st Floor</button>
+        </div>
+      </div>
+
+      <nav class="card controls-bar" aria-label="Room Camera Presets">
+        <button type="button" data-preset="f1_overview" class="active">1F Overview</button>
+        <button type="button" data-preset="f1_bigclass">1F Big Classroom</button>
+        <button type="button" data-preset="f1_smallclass">1F Class Room</button>
+        <button type="button" data-preset="f1_study">1F Self Study</button>
+        <button type="button" data-preset="f1_corridor">1F Corridor &amp; Stairs</button>
+        <button type="button" data-preset="f1_staff">1F Staff Room</button>
+        <button type="button" data-preset="f1_kitchen">1F Kitchen</button>
+        <button type="button" data-preset="f1_doubt">1F Doubt Class</button>
+        <button type="button" data-preset="f1_room">1F Room</button>
+        <button type="button" data-preset="gf_gate">GF Gate &amp; Cooler</button>
+        <button type="button" data-preset="gf_stand">GF Cycle Stand</button>
+      </nav>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="card legend">
+        <span><strong>Footprint:</strong> 17m × 27m × 2 Floors (7.8m tall)</span>
+        <span><strong>1st Floor:</strong> 2 Classrooms · Self Study · Staff Room · Kitchen · Doubt Class · Room</span>
+        <span><strong>Ground Floor:</strong> Gate · Water Cooler · Room · Stairs · 33 Cycles</span>
+      </div>
+    </div>
+
+    <div id="loading-status" class="status-pill">Loading CoachingCenter_2Floors.glb...</div>
+  </main>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    const canvas = document.getElementById('viewport-canvas');
+    const statusEl = document.getElementById('loading-status');
+    const modeHintEl = document.getElementById('mode-hint');
+    const walkBtn = document.getElementById('toggle-walk');
+    const walkFloorBtn = document.getElementById('walk-floor-btn');
+    const presetButtons = Array.from(document.querySelectorAll('button[data-preset]'));
+    const layerButtons = Array.from(document.querySelectorAll('button[data-layer]'));
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#1e293b');
+    scene.fog = new THREE.Fog('#1e293b', 42, 95);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.65;
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(20.5, 21.5, 25.0);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.target.set(-0.3, 4.5, 0.0);
+
+    // Sun + Soft Fill
+    const sun = new THREE.DirectionalLight(0xfffbeb, 1.9);
+    sun.position.set(18, 34, -22);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 2;
+    sun.shadow.camera.far = 95;
+    sun.shadow.camera.left = -24;
+    sun.shadow.camera.right = 24;
+    sun.shadow.camera.top = 24;
+    sun.shadow.camera.bottom = -24;
+    sun.shadow.bias = -0.0005;
+    scene.add(sun);
+
+    const fill = new THREE.DirectionalLight(0xbae6fd, 0.45);
+    fill.position.set(-18, 16, 18);
+    scene.add(fill);
+
+    // Interior fill lights for 1F and GF
+    const light1F = new THREE.PointLight(0xfff7ed, 18, 34, 1.5);
+    light1F.position.set(0.5, 7.1, 0.0);
+    scene.add(light1F);
+    const lightGF = new THREE.PointLight(0xfff7ed, 16, 34, 1.5);
+    lightGF.position.set(0.5, 3.2, 2.0);
+    scene.add(lightGF);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(140, 140),
+      new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.95 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.12;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Note: glTF maps Blender (X, Y, Z) -> Three.js (X, Z, -Y)
+    // First floor walkable floor is at Three.js Y = 4.00
+    const PRESETS = {
+      f1_overview:   { layer: '1f-cutaway', pos: [20.5, 21.5, 25.0], target: [-0.3, 4.5, 0.0] },
+      f1_bigclass:   { layer: '1f-cutaway', pos: [-4.4, 6.4, -12.6], target: [-4.4, 5.1, -4.6] },
+      f1_smallclass: { layer: '1f-cutaway', pos: [7.8, 6.3, -11.35], target: [0.2, 5.1, -11.35] },
+      f1_study:      { layer: '1f-cutaway', pos: [4.8, 6.2, -4.4],   target: [6.0, 5.0, -7.8] },
+      f1_corridor:   { layer: '1f-cutaway', pos: [2.8, 6.3, -2.5],   target: [-4.0, 5.2, 1.5] },
+      f1_staff:      { layer: '1f-cutaway', pos: [2.0, 6.1, 4.3],    target: [6.2, 5.0, 4.3] },
+      f1_kitchen:    { layer: '1f-cutaway', pos: [-4.5, 6.1, 5.8],   target: [-7.0, 4.9, 2.5] },
+      f1_doubt:      { layer: '1f-cutaway', pos: [-3.3, 6.4, 10.25],  target: [6.0, 4.9, 10.25] },
+      f1_room:       { layer: '1f-cutaway', pos: [-4.6, 6.2, 8.2],   target: [-7.2, 5.0, 10.5] },
+      gf_gate:       { layer: 'gf-cutaway', pos: [-0.8, 2.0, 16.5],  target: [2.2, 1.2, 8.5] },
+      gf_stand:      { layer: 'gf-cutaway', pos: [0.5, 3.2, 8.5],    target: [6.0, 1.0, -3.5] },
+    };
+
+    const allNodes = [];
+    let currentLayer = '1f-cutaway';
+
+    function applyLayer(mode) {
+      currentLayer = mode;
+      layerButtons.forEach((b) => b.classList.toggle('active', b.dataset.layer === mode));
+      for (const obj of allNodes) {
+        const name = obj.name || '';
+        const isRoof = /^(F1_Roof_|F1_TubeLight_|Fan_)/.test(name);
+        const is1F = /^(F1_)/.test(name);
+        if (mode === 'full') {
+          obj.visible = true;
+        } else if (mode === '1f-cutaway') {
+          obj.visible = !isRoof;
+        } else if (mode === 'gf-cutaway') {
+          obj.visible = !is1F && !isRoof;
+        }
+      }
+    }
+
+    const loader = new GLTFLoader();
+    loader.load(
+      '/CoachingPropHunt/Assets/Art/CoachingMap/CoachingCenter_2Floors.glb?v=' + Date.now(),
+      (gltf) => {
+        const model = gltf.scene;
+        model.traverse((obj) => {
+          allNodes.push(obj);
+          if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+          }
+        });
+        scene.add(model);
+        applyLayer('1f-cutaway');
+        statusEl.classList.add('hidden');
+      },
+      (xhr) => {
+        if (xhr.total > 0) {
+          const pct = Math.round((xhr.loaded / xhr.total) * 100);
+          statusEl.textContent = `Loading 2-Floor 3D Map (${pct}%)...`;
+        }
+      },
+      (err) => {
+        statusEl.textContent = `Error loading GLB: ${err?.message || err}`;
+      }
+    );
+
+    function applyPreset(name) {
+      const p = PRESETS[name];
+      if (!p) return;
+      applyLayer(p.layer);
+      camera.position.set(...p.pos);
+      controls.target.set(...p.target);
+      controls.update();
+      presetButtons.forEach((b) => b.classList.toggle('active', b.dataset.preset === name));
+    }
+
+    presetButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (walkMode) toggleWalkMode(false);
+        applyPreset(btn.dataset.preset);
+      });
+    });
+
+    layerButtons.forEach((btn) => {
+      btn.addEventListener('click', () => applyLayer(btn.dataset.layer));
+    });
+
+    let walkMode = false;
+    let walkFloor = '1F';
+    const keys = new Set();
+    let yaw = 0;
+    let pitch = 0;
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    function placeWalker(floor) {
+      walkFloor = floor;
+      if (floor === '1F') {
+        camera.position.set(-1.0, 5.65, -0.5);
+        walkFloorBtn.textContent = 'Go To Ground Floor';
+      } else {
+        camera.position.set(-0.8, 1.65, 15.8);
+        walkFloorBtn.textContent = 'Go To 1st Floor';
+      }
+      yaw = 0;
+      pitch = -0.05;
+      camera.rotation.order = 'YXZ';
+      camera.rotation.set(pitch, yaw, 0);
+    }
+
+    function toggleWalkMode(force) {
+      walkMode = typeof force === 'boolean' ? force : !walkMode;
+      walkBtn.classList.toggle('active', walkMode);
+      walkFloorBtn.style.display = walkMode ? 'inline-block' : 'none';
+      controls.enabled = !walkMode;
+      if (walkMode) {
+        applyLayer('full');
+        placeWalker(currentLayer === 'gf-cutaway' ? 'GF' : '1F');
+        modeHintEl.textContent = 'Walk Mode: W/A/S/D move · Drag mouse look · Shift sprint · Q/E down/up';
+      } else {
+        modeHintEl.textContent = 'Orbit Mode: Left-drag rotate · Right-drag pan · Scroll zoom';
+        const forward = new THREE.Vector3(0, 0, -4).applyEuler(camera.rotation);
+        controls.target.copy(camera.position).add(forward);
+        controls.update();
+      }
+    }
+
+    walkBtn.addEventListener('click', () => toggleWalkMode());
+    walkFloorBtn.addEventListener('click', () => placeWalker(walkFloor === '1F' ? 'GF' : '1F'));
+
+    window.addEventListener('keydown', (e) => { keys.add(e.code); });
+    window.addEventListener('keyup', (e) => { keys.delete(e.code); });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!walkMode) return;
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+    window.addEventListener('pointerup', () => { dragging = false; });
+    window.addEventListener('pointermove', (e) => {
+      if (!walkMode || !dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      yaw -= dx * 0.004;
+      pitch = Math.max(-1.35, Math.min(1.35, pitch - dy * 0.004));
+      camera.rotation.set(pitch, yaw, 0);
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+    });
+
+    let rafId = null;
+    let lastTime = performance.now();
+    const moveVec = new THREE.Vector3();
+    const rightVec = new THREE.Vector3();
+
+    function animate(now) {
+      rafId = requestAnimationFrame(animate);
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      if (walkMode) {
+        const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 7.5 : 4.2;
+        moveVec.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        rightVec.set(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        if (keys.has('KeyW') || keys.has('ArrowUp')) camera.position.addScaledVector(moveVec, speed * dt);
+        if (keys.has('KeyS') || keys.has('ArrowDown')) camera.position.addScaledVector(moveVec, -speed * dt);
+        if (keys.has('KeyD') || keys.has('ArrowRight')) camera.position.addScaledVector(rightVec, speed * dt);
+        if (keys.has('KeyA') || keys.has('ArrowLeft')) camera.position.addScaledVector(rightVec, -speed * dt);
+        if (keys.has('KeyE')) camera.position.y += 2.6 * dt;
+        if (keys.has('KeyQ')) camera.position.y = Math.max(0.8, camera.position.y - 2.6 * dt);
+      } else {
+        controls.update();
+      }
+      renderer.render(scene, camera);
+    }
+
+    function startRender() {
+      if (rafId === null) {
+        lastTime = performance.now();
+        rafId = requestAnimationFrame(animate);
+      }
+    }
+
+    function stopRender() {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopRender();
+      else startRender();
+    });
+
+    canvas.addEventListener('contentvisibilityautostatechange', (e) => {
+      if (e.skipped) stopRender();
+      else startRender();
+    });
+
+    startRender();
+  </script>
+</body>
+</html>
